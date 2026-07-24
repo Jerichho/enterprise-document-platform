@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-label="Demo screenshot placeholder">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b151c"/>
+      <stop offset="55%" stop-color="#122029"/>
+      <stop offset="100%" stop-color="#0f1c24"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="420" rx="24" fill="url(#g)" stroke="#2f9e8b" stroke-opacity="0.45"/>
+  <circle cx="120" cy="110" r="90" fill="#2f9e8b" fill-opacity="0.12"/>
+  <circle cx="820" cy="320" r="120" fill="#3c6ea0" fill-opacity="0.16"/>
+  <text x="480" y="175" text-anchor="middle" fill="#e8f0f4" font-family="Georgia, serif" font-size="34">Demo screenshot / GIF placeholder</text>
+  <text x="480" y="225" text-anchor="middle" fill="#a8bcc7" font-family="Helvetica, Arial, sans-serif" font-size="18">Login → upload sample policy → ask Assistant → show citations</text>
+  <text x="480" y="275" text-anchor="middle" fill="#2f9e8b" font-family="Helvetica, Arial, sans-serif" font-size="16">Replace docs/assets/demo-placeholder.svg with real media</text>
+</svg>

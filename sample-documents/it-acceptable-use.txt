@@ -1,0 +1,19 @@
+Acceptable Use Policy
+Department: Information Technology
+Effective date: 2026-01-01
+
+1. Company devices
+Company-issued laptops and phones are for business use. Personal software may be
+installed only from the approved IT catalog.
+
+2. Data handling
+Confidential customer and employee data must not be stored on personal cloud drives
+such as personal Dropbox, Google Drive, or iCloud accounts.
+
+3. Password requirements
+Passwords must be at least 12 characters and rotated every 90 days. Multi-factor
+authentication is required for all remote access.
+
+4. Incident reporting
+Suspected phishing or malware must be reported to security@example.com within
+one business hour of discovery.

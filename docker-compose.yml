@@ -1,0 +1,62 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: ekp-db
+    environment:
+      POSTGRES_USER: ekp
+      POSTGRES_PASSWORD: ekp_secret
+      POSTGRES_DB: ekp
+    ports:
+      - "5432:5432"
+    volumes:
+      - ekp_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ekp -d ekp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ekp-api
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://ekp:ekp_secret@db:5432/ekp
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    develop:
+      watch:
+        - action: sync
+          path: ./backend/app
+          target: /app/app
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: ekp-frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+
+volumes:
+  ekp_pgdata:

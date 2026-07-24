@@ -1,0 +1,73 @@
+# Production-shaped Compose example (NOT used by default local demos).
+# Copy to docker-compose.prod.yml and supply a real .env.prod — do not commit secrets.
+#
+#   docker compose -f docker-compose.prod.example.yml --env-file backend/.env.prod up --build
+#
+# Prefer Azure Container Apps for cloud; this file mirrors the same process model.
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ekp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ekp
+    volumes:
+      - ekp_pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ekp -d ekp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: production
+      LOG_FORMAT: json
+      DATABASE_URL: postgresql+psycopg://ekp:${POSTGRES_PASSWORD}@db:5432/ekp
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://app.example.com}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      STORAGE_LOCAL_PATH: /app/storage/uploads
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}
+      AZURE_STORAGE_CONTAINER: ${AZURE_STORAGE_CONTAINER:-documents}
+      LLM_PROVIDER: ${LLM_PROVIDER:-fake}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-fake}
+      TOGETHER_API_KEY: ${TOGETHER_API_KEY:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ekp_uploads_prod:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  ekp_pgdata_prod:
+  ekp_uploads_prod:
