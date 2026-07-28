@@ -1,99 +1,111 @@
-# Enterprise Knowledge Management Platform
+# Enterprise Document Intelligence Platform
+
 ![CI](https://github.com/Jerichho/enterprise-document-platform/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![React](https://img.shields.io/badge/React-TypeScript-blue)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-blue)
 
-Secure internal document management with traditional search and **grounded**
-Retrieval-Augmented Generation (RAG)—built as a production-style portfolio full-stack app.
+A full-stack internal document platform that lets administrators upload company policies
+and employees search or ask questions across them. Documents are extracted, chunked,
+embedded, and indexed in PostgreSQL with pgvector. Answers are grounded in retrieved
+content and include structured citations or an insufficient-context refusal.
 
-> **Status:** Feature-complete for local demo (auth → documents → ingestion → RAG → admin/ops).  
-> Fake LLM/embeddings work out of the box; Together.ai is optional for live answers.
+> **Status:** Feature-complete local portfolio demo.  
+> Fake providers run offline by default; Together.ai can be enabled for live embeddings and answers.
 
-![Demo placeholder](docs/assets/demo-placeholder.svg)
+![Assistant with grounded citations](docs/assets/assistant-demo.png)
 
-*Replace the placeholder with screenshots or a short GIF of login → upload → assistant citations.*
+## Project highlights
 
-## Problem
+- 25 REST API endpoints
+- 9 relational database models
+- 11 Alembic migrations
+- 130 backend and frontend automated test cases
+- PDF, DOCX, and TXT ingestion
+- PostgreSQL pgvector retrieval with an HNSW cosine index
+- JWT authentication with admin and employee roles
+- Docker and GitHub Actions CI
 
-Enterprises bury policies in shared drives. Employees ask the same questions; answers are
-hard to find and easy to invent. This platform stores approved documents, indexes them for
-keyword and vector search, and answers questions **only when retrieved context is strong
-enough**—with citations back to source pages.
+## Core features
 
-## What this project demonstrates
-
-- Modular FastAPI backend (API → services → repositories)
-- JWT auth + RBAC (admin vs employee)
-- Document upload, versioning, and async ingestion jobs
-- pgvector semantic retrieval + grounded chat with citations / refusals
-- React admin + employee UI (documents, assistant, analytics, status)
-- Observability: request IDs, JSON logs, readiness probes, admin metrics
-- Azure-ready packaging and an explicit scale-out story for workers
+- Secure document upload, versioning, preview, deletion, and reprocessing
+- PDF, DOCX, and TXT extraction with configurable chunking
+- Semantic retrieval with PostgreSQL, pgvector, and an HNSW cosine index
+- Grounded AI answers with structured citations and insufficient-context refusals
+- JWT authentication and admin/employee role-based access control
+- Persistent conversations with user ownership enforcement
+- Admin analytics, audit logs, ingestion monitoring, and stale-job recovery
+- Local and Azure Blob storage providers
+- Health checks, readiness checks, request IDs, and structured logging
+- Azure Blob storage adapter and documented Azure deployment path
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph clients [Clients]
-    UI[React SPA]
+  UI[React SPA]
+  subgraph API[FastAPI application]
+    Routes[API routes]
+    Services[Services]
+    Repositories[Repositories]
+    Ingestion[Ingestion pipeline]
+    Retrieval[RAG retrieval]
   end
-  subgraph api [FastAPI]
-    Auth[Auth / RBAC]
-    Docs[Documents]
-    RAG[Search / Conversations]
-    Admin[Admin analytics]
-  end
-  subgraph data [Data]
-    PG[(PostgreSQL + pgvector)]
-    FS[Local / Azure Blob]
-  end
-  subgraph ai [Providers]
-    Emb[Embedding provider]
-    LLM[LLM provider]
-  end
-  UI --> Auth
-  UI --> Docs
-  UI --> RAG
-  UI --> Admin
-  Docs --> FS
-  Docs --> PG
-  RAG --> Emb
-  RAG --> LLM
-  RAG --> PG
-  Admin --> PG
+  PG[(PostgreSQL + pgvector)]
+  Storage[Local disk or Azure Blob]
+  Embeddings[Fake or Together embeddings]
+  LLM[Fake or Together LLM]
+  UI -->|JWT Bearer + JSON| Routes
+  Routes --> Services
+  Services --> Repositories
+  Services --> Ingestion
+  Services --> Retrieval
+  Repositories --> PG
+  Ingestion --> Storage
+  Ingestion --> Embeddings
+  Ingestion --> PG
+  Retrieval --> Embeddings
+  Retrieval --> PG
+  Retrieval --> LLM
 ```
 
 ### RAG workflow
 
 ```mermaid
 sequenceDiagram
+  participant Admin
   participant User
   participant API
-  participant Job as IngestionJob
-  participant Emb as Embeddings
-  participant DB as pgvector
+  participant Job as Background ingestion
+  participant Storage
+  participant Emb as Embedding provider
+  participant DB as PostgreSQL + pgvector
   participant LLM
-
-  User->>API: Upload document (admin)
-  API->>DB: Save Document + pending job
-  API-->>User: 201 pending/processing
-  API->>Job: BackgroundTasks process
+  Admin->>API: Upload PDF, DOCX, or TXT
+  API->>Storage: Validate and store file
+  API->>DB: Create document, version, and ingestion job
+  API-->>Admin: Return pending document
+  API->>Job: Schedule processing
+  Job->>Storage: Read file
+  Job->>Job: Extract, clean, and chunk text
   Job->>Emb: Embed chunks
-  Job->>DB: Store vectors + stages
-
+  Job->>DB: Store chunks and vectors
   User->>API: Ask question
   API->>Emb: Embed query
-  API->>DB: Similarity search
-  alt max score < RETRIEVAL_MIN_SCORE
-    API-->>User: Insufficient context (no citations)
-  else grounded
-    API->>LLM: Complete with sources
-    API-->>User: Answer + citations
+  API->>DB: Retrieve candidate chunks
+  API->>API: Apply relevance and evidence checks
+  alt insufficient evidence
+    API->>DB: Persist refusal message
+    API-->>User: Insufficient context
+  else sufficient evidence
+    API->>LLM: Send grounded prompt and sources
+    LLM-->>API: Generated answer
+    API->>DB: Persist answer and structured citations
+    API-->>User: Grounded answer with citations
   end
 ```
 
-More detail: [docs/architecture.md](docs/architecture.md) · [docs/decisions.md](docs/decisions.md)
+Details: [architecture.md](docs/architecture.md) · [decisions.md](docs/decisions.md) · [rag.md](docs/rag.md)
 
 ## Technology stack
 
@@ -103,29 +115,10 @@ More detail: [docs/architecture.md](docs/architecture.md) · [docs/decisions.md]
 | Database | PostgreSQL + pgvector (HNSW cosine) |
 | Frontend | React 18, TypeScript, Vite, React Router |
 | AI | Together.ai **or** deterministic `fake` providers |
-| Quality | Ruff, MyPy, Pytest, ESLint, TypeScript, Vitest, `make check` |
+| Quality | Ruff, MyPy, Pytest, ESLint, TypeScript, Vitest |
 | Infra | Docker Compose, GitHub Actions |
 
-## Repository layout
-
-```text
-├── backend/              # FastAPI app, Alembic, tests
-├── frontend/             # React SPA
-├── sample-documents/     # Demo policies for upload / RAG demos
-├── scripts/              # bootstrap, create_admin, seed_dev
-├── docs/                 # architecture, security, ops, Azure, API examples
-├── .github/workflows/    # CI
-├── docker-compose.yml
-└── Makefile
-```
-
-## Prerequisites
-
-- Docker Desktop (or Engine + Compose) **or** local PostgreSQL 16+ with pgvector
-- Python 3.12+
-- Node.js 20+ (22 recommended)
-
-## Quick start (Docker Compose)
+## Quick start
 
 ```bash
 cp backend/.env.example backend/.env
@@ -138,231 +131,122 @@ docker compose up --build
 | Frontend | http://localhost:5173 |
 | API | http://localhost:8000 |
 | OpenAPI | http://localhost:8000/docs |
-| Health / Ready | `/health` · `/ready` |
 
-The API container runs `alembic upgrade head` on startup.
-
-## Local development
+### Local development
 
 ```bash
-bash scripts/bootstrap.sh          # copies .env files
-docker compose up -d db            # or use Homebrew Postgres + pgvector
-make migrate                       # alembic upgrade head
-# terminal 1
-cd backend && source .venv/bin/activate && pip install -e '.[dev]'
-make run
-# terminal 2
-cd frontend && npm install && npm run dev
-make seed                          # admin + employee users
+bash scripts/bootstrap.sh
+docker compose up -d db
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev]'
+alembic upgrade head
+uvicorn app.main:app --reload
 ```
 
-### Seed development users
+In another terminal:
 
 ```bash
-make seed
-# or: bash scripts/seed_dev.sh
+cd frontend
+npm install
+npm run dev
 ```
+
+From the repository root, seed demo users with `make seed`:
 
 | Role | Email | Password |
 |------|-------|----------|
 | Admin | `admin@example.com` | `admin123` |
 | Employee | `employee@example.com` | `employee123` |
 
-Custom admin only:
+## Demo walkthrough
 
-```bash
-bash scripts/create_admin.sh you@example.com 'your-secure-password' 'Your Name'
-```
+1. Sign in as **admin** and upload a file from `sample-documents/`.
+2. Wait until processing status is **Completed**.
+3. In **Assistant**, ask: *How many PTO days do employees receive?*
+4. Confirm structured citations under the answer; try an unsupported question for a refusal.
 
-## Demo walkthrough (RAG)
+The default fake providers require no API key and are intended for deterministic tests
+and workflow demonstrations. They do not represent production retrieval or answer quality.
 
-1. Sign in as **admin** (`admin@example.com` / `admin123`).
-2. **Admin → Upload** one of `sample-documents/*.txt` (e.g. HR PTO policy).
-3. Wait until status is **Completed** on Documents / detail (pipeline stages update live).
-4. Open **Assistant** and ask: *How many PTO days do employees receive?*
-5. Confirm the answer includes **citations** with document title and relevance score.
-6. Try a nonsense question — expect an **insufficient context** refusal.
+To use Together.ai, set `EMBEDDING_PROVIDER=together`, `LLM_PROVIDER=together`, and
+`TOGETHER_API_KEY` in `backend/.env`, then reprocess documents after switching providers.
 
-With fake providers, embeddings are deterministic local vectors (good for demos/tests).  
-For live model quality:
+## Configuration
 
-```bash
-# backend/.env
-EMBEDDING_PROVIDER=together
-LLM_PROVIDER=together
-TOGETHER_API_KEY=...
-```
-
-## Fake vs real providers
-
-| Setting | Behavior |
-|---------|----------|
-| `*_PROVIDER=fake` (default) | No network; stable tests and offline demos |
-| `*_PROVIDER=together` | HTTP embeddings + chat; requires `TOGETHER_API_KEY` |
-| `APP_ENV=test` | Forces fake-compatible behavior; ingestion runs inline |
-
-Interfaces live under `backend/app/ingestion/embeddings/` and `backend/app/llm/`.
-
-## Environment variables
-
-Full list: [`backend/.env.example`](backend/.env.example) · [`frontend/.env.example`](frontend/.env.example)
+Important settings include the database URL, JWT secret, provider selection, storage
+backend, CORS origins, frontend API URL, and RAG thresholds:
 
 | Variable | Purpose |
 |----------|---------|
-| `DATABASE_URL` | SQLAlchemy URL |
-| `SECRET_KEY` | JWT signing (production-hardened) |
-| `CORS_ORIGINS` | Browser origins |
-| `EMBEDDING_PROVIDER` / `LLM_PROVIDER` | `fake` or `together` |
-| `TOGETHER_API_KEY` | Required for Together providers |
-| `RETRIEVAL_TOP_K` / `RETRIEVAL_MIN_SCORE` | RAG ranking / refusal gate |
-| `STORAGE_BACKEND` | `local` (default) or `azure` (requires `[azure]` extra) |
-| `LOG_FORMAT` | `json` or `text` |
-| `INGESTION_STALE_JOB_MINUTES` | Orphan job recovery window |
-| `VITE_API_BASE_URL` | Frontend → API base URL |
+| `RAG_TOP_K` / `RAG_MIN_RELEVANCE_SCORE` | Retrieval depth and minimum relevance |
+| `RAG_MIN_SUPPORTING_CHUNKS` | Minimum supporting evidence required |
+| `RAG_MIN_TERM_OVERLAP` | Lexical support requirement |
+| `RAG_ANSWER_STYLE` | Answer-formatting preference |
 
-**Never commit real secrets.** `.env` is gitignored.
+Full list: [`backend/.env.example`](backend/.env.example) · [`frontend/.env.example`](frontend/.env.example).  
+**Never commit real secrets.**
 
-## Database migrations
+## API
 
-```bash
-make migrate
-# or: cd backend && alembic upgrade head
-# create revision: alembic revision --autogenerate -m "message"
-```
+The platform exposes 25 REST endpoints across authentication, documents, search,
+conversations, administration, and system health.
 
-## Makefile targets
+- OpenAPI: `http://localhost:8000/docs`
+- Examples: [docs/api-examples.md](docs/api-examples.md)
 
-| Target | Action |
-|--------|--------|
-| `make check` | Ruff + format check + MyPy + Pytest + ESLint + tsc + Vitest + frontend build |
-| `make test` | Backend + frontend tests |
-| `make coverage` | Coverage reports (not %-gated) |
-| `make lint` / `make format` | Ruff (+ frontend ESLint via `make lint`) |
-| `make migrate` | Alembic upgrade |
-| `make run` | API with reload |
-| `make seed` | Dev admin + employee users |
+Uploads create an `IngestionJob` and process extraction → chunking → embedding → indexing
+in a background task. See [docs/operations.md](docs/operations.md).
 
-## Testing
+## Security
+
+Implemented controls include bcrypt password hashing, JWT authentication, role-based
+authorization, conversation ownership, upload type and magic-byte validation, rate
+limiting, structured errors, CORS restrictions, audit logging, and production
+configuration checks. See [docs/security.md](docs/security.md).
+
+## Testing and CI
 
 ```bash
 make test
-make check      # mirrors CI quality gates locally
-make coverage   # backend/htmlcov · frontend/coverage
+make check
 ```
 
-External APIs are mocked or replaced with fake providers. See [docs/api-examples.md](docs/api-examples.md)
-for curl recipes used in manual verification.
-
-## Continuous integration
-
-GitHub Actions (`.github/workflows/ci.yml`) runs on pushes and pull requests:
-
-| Job | Checks |
-|-----|--------|
-| **Backend** | Install deps, Ruff lint + format, MyPy, Alembic single-head + `upgrade head`, Pytest (Postgres/pgvector service) |
-| **Frontend** | `npm ci`, ESLint (`--max-warnings 0`), TypeScript, Vitest, production build |
-| **Docker** | Build API + frontend production images (after the jobs above pass) |
-
-Any failing step fails the workflow. Locally: `make check`.
-
-## API surface (summary)
-
-| Area | Paths |
-|------|-------|
-| Auth | `/api/v1/auth/register` · `login` · `me` |
-| Documents | `/api/v1/documents` (+ preview, reprocess, ingestion-jobs) |
-| Search | `/api/v1/search` · `/search/semantic` |
-| Chat | `/api/v1/conversations` · `.../messages` |
-| Admin | `/api/v1/admin/analytics` · `ingestion-jobs` · `audit-logs` |
-| Ops | `/health` · `/ready` |
-
-Interactive docs: http://localhost:8000/docs  
-Examples: [docs/api-examples.md](docs/api-examples.md)
-
-### Background ingestion (short)
-
-Upload validates → stores file → creates `IngestionJob` → returns pending → processes via
-FastAPI `BackgroundTasks`. Retries = reprocess; stale jobs recovered on startup.  
-Scale-out: same job table + external workers (Celery/RQ/ARQ). Details in the README section
-below and [docs/operations.md](docs/operations.md).
-
-<details>
-<summary>Background ingestion details</summary>
-
-1. Validate and store the file  
-2. Create `IngestionJob` (`pending`)  
-3. Return document with pending/processing status  
-4. Extract → chunk → embed → index asynchronously  
-
-| Concern | Behavior |
-|---------|----------|
-| Test env | Inline in the request |
-| Duplicate work | Atomic claim `pending` → `running` |
-| Retries | New attempt via **Reprocess** |
-| Crashes | Stale recover on startup / admin action |
-| Production | Move workers to a queue; keep job table |
-
-</details>
-
-## Frontend routes
-
-| Route | Purpose |
-|-------|---------|
-| `/login`, `/register` | Auth |
-| `/documents`, `/documents/:id` | Browse / detail / reprocess |
-| `/admin/upload` | Admin upload |
-| `/assistant` | Grounded Q&A |
-| `/admin` | Analytics, jobs, audit |
-| `/status` | Health / readiness UI |
-
-## Security decisions
-
-- bcrypt passwords, HS256 JWT, uniform login errors  
-- Admin-only upload/delete/reprocess; conversation ownership  
-- Upload type/size/magic-byte checks; path-traversal-safe storage keys  
-- Production refuses weak `SECRET_KEY` / default DB password  
-- Rate limits + audit log for auth and document admin actions  
-
-Full notes: [docs/security.md](docs/security.md)
-
-## Known limitations
-
-- Ingestion runs in the API process (not multi-worker by default)  
-- In-memory rate limiting (swap for Redis in multi-instance)  
-- Local disk is the default store; Azure Blob is optional (`pip install -e ".[azure]"`)  
-- Documents are org-visible (no fine-grained per-document ACLs)  
-- Grounding reduces unsupported answers; it does not eliminate hallucinations  
+GitHub Actions runs lint, types, Alembic, Pytest (Postgres/pgvector), frontend checks,
+and Docker image builds. See [docs/ci.md](docs/ci.md).
 
 ## Cloud / Azure
 
-Local Compose stays the default. For a cloud path (manual, not auto-provisioned):
+Local Compose is the default. Manual cloud path: [docs/azure.md](docs/azure.md),
+[infra/azure/](infra/azure/README.md), [docker-compose.prod.example.yml](docker-compose.prod.example.yml).
 
-- Deployment plan: [docs/azure.md](docs/azure.md)
-- Infra sketches: [infra/azure/](infra/azure/README.md) (Bicep — review before any `az deployment`)
-- Production-shaped Compose: [docker-compose.prod.example.yml](docker-compose.prod.example.yml)
+Blob storage uses a real Azure adapter when `STORAGE_BACKEND=azure`. The current
+implementation uses a connection string; production secret storage through Key Vault
+and managed identity are documented follow-ups.
 
-Blob storage uses a real adapter when `STORAGE_BACKEND=azure` (connection string via Key Vault in production). Managed identity is a follow-up.
+## Known limitations
 
-## Future production improvements
+- Ingestion runs through FastAPI `BackgroundTasks` inside the API process
+- Rate limiting is stored in memory and is not shared across replicas
+- Local disk is the default storage backend; Azure Blob is optional
+- Documents are organization-wide and do not have per-document ACLs
+- Authentication uses access tokens only; refresh tokens and SSO are not implemented
+- Azure infrastructure is documented and sketched in Bicep but is not automatically deployed
+- Grounding and evidence thresholds reduce unsupported answers but cannot eliminate hallucinations
 
-- Queue-backed ingestion workers and horizontal API replicas  
-- Entra ID / SSO and refresh-token sessions  
-- Redis rate limits + shared caches  
-- Azure managed identity for Blob (no connection string)  
-- Stronger eval harness for retrieval quality  
-
-## Documentation index
+## Documentation
 
 | Doc | Contents |
 |-----|----------|
 | [architecture.md](docs/architecture.md) | Layers, RAG, jobs |
-| [decisions.md](docs/decisions.md) | Interview-ready “why” |
+| [decisions.md](docs/decisions.md) | Design trade-offs |
 | [security.md](docs/security.md) | Auth, uploads, audits |
 | [operations.md](docs/operations.md) | Probes, logging, stale jobs |
 | [api-examples.md](docs/api-examples.md) | curl recipes |
-| [rag.md](docs/rag.md) | Answer quality, thresholds, fake vs real providers |
+| [rag.md](docs/rag.md) | Thresholds and providers |
 | [azure.md](docs/azure.md) | Cloud deployment plan |
-| [ci.md](docs/ci.md) | GitHub Actions quality gates |
+| [ci.md](docs/ci.md) | CI quality gates |
 | [sample-documents](sample-documents/README.md) | Demo policies |
 
 ## License
