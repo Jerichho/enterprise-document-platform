@@ -1,4 +1,8 @@
 # Enterprise Knowledge Management Platform
+![CI](https://github.com/Jerichho/enterprise-document-platform/actions/workflows/ci.yml/badge.svg)
+![Python](https://img.shields.io/badge/Python-3.12-blue)
+![React](https://img.shields.io/badge/React-TypeScript-blue)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-blue)
 
 Secure internal document management with traditional search and **grounded**
 Retrieval-Augmented Generation (RAG)—built as a production-style portfolio full-stack app.
